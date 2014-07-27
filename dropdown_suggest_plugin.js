@@ -6,10 +6,12 @@
   var _settings;
   var _url;
 
-  var _cacheSize = 10;
+  var _cacheSize = 30;
   var _cachedResults = {};
   var _cachedResultsKeys = [];
   var _cachedQueryResult = [];
+
+  var _oldInput;
 
   $.fn.dropdown_suggest = function(url, options) {
 
@@ -21,7 +23,7 @@
       dataType: 'json',
       limit: 10,
       fade_time: 100,
-      frontend_filter: false,
+      clientside_filter: true,
       select_callback: function() {},
     }, options);
 
@@ -39,33 +41,39 @@
         return;
       }
 
-      // If the input is not empty, query for matching customer ids
+      // Use the query cache if we are using clientside filtering,
+      // and the new query string will give a subset of the results of the old one,
+      // otherwise clear it
+      var useQueryCache = _settings.clientside_filter &&
+        new RegExp('^' + _oldInput + '.*').test(input);
+      if(!useQueryCache) {
+        _cachedQueryResult = null;
+      }
+
+      // If the input is not empty, query for matching suggestions
       if(input) {
         $dropdown.data('selected_index', 'none');
 
         // If there are cached results, skip the ajax call
         if(_cachedResults[input]) {
           var suggestions = _cachedResults[input];
-          populate_customer_dropdown(suggestions);
-          _cachedQueryResult = suggestions;
-        } else if(_cachedQueryResult) {
-          // If the same set of data is being filtered, use the cached query results
+          populate_dropdown(suggestions);
+
+        // If the same set of data is being filtered, use the cached query results
+        } else if(useQueryCache && _cachedQueryResult) {
           var suggestions = filterData(_cachedQueryResult, input);
-          populate_customer_dropdown(suggestions);
-          _cachedQueryResult = suggestions;
-          _cachedResults[input] = suggestions;
-          _cachedResultsKeys.push(input);
+          cacheResults(input, suggestions);
+          populate_dropdown(suggestions);
+
+        // Perform the ajax call  
         } else {
-          // Perform the ajax call
           ajax_call(input).done(function(data) {
             if(data && data.length > 0) {
-              if(_settings.frontend_filter) {
+              if(_settings.clientside_filter) {
                 data = filterData(data, input);
               }
-              _cachedQueryResult = data;
-              _cachedResults[input] = data;
-              _cachedResultsKeys.push(input);
-              populate_customer_dropdown(data);
+              cacheResults(input, data);
+              populate_dropdown(data);
             } else {
               $dropdown.hide(_settings.fade_time);
             }
@@ -77,19 +85,20 @@
           var key = _cachedResultsKeys.shift();
           delete _cachedResults[key];
         }
-
       } else {
         $dropdown.hide(_settings.fade_time);
       }
-  
     });
 
-    // Update selection in customer dropdown if the arrow keys are pressed
+    // Update selection in dropdown if the arrow keys are pressed
     $input.on('keydown', function(event) {
+      var input = $input.val();
+
       // If the input was empty, clear the query cache to start anew
-      if(!$input.val()) {
+      if(!input) {
         _cachedQueryResult = null;
       }
+      _oldInput = input;
 
       var down = event.which == 40; // down arrow pressed
       var up = event.which == 38; // up arrow pressed
@@ -119,7 +128,7 @@
     });
 
     // If the mouse enters a dropdown element, highlight it and clear the selection
-    $(document).on('mouseenter', '.customer_id_dropdown li', function(event) {
+    $(document).on('mouseenter', '.dropdown_suggest li', function(event) {
       $dropdown.data('selected_index', 'none');
       $dropdown.find('li').removeAttr('selected');
       $(event.target).attr('selected', 'selected');
@@ -132,19 +141,24 @@
       }
     });
 
-    // Select events
+    // Select an item either by clicking on it or by pressing enter
     $dropdown.on('click', function(event) {
       // Stop link activation
       event.preventDefault();
-      $input.val($(event.target).data('id'));
-      _settings.select_callback();
+      var selected_val = $(event.target).data('id');
+      $input.val(selected_val);
+      // Hide dropdown
+      $dropdown.hide(_settings.fade_time, function() {
+        // Perform user defined callback
+        _settings.select_callback(selected_val);
+      })
     });
     $input.keypress(function(event) {
       // Pressed enter
       if(event.which == 13) {
         event.preventDefault();
         if(!$dropdown[0].hidden && $dropdown.data('selected_index') !== 'none') {
-          // Set value of input to the selected dropdown customer id
+          // Set value of input to the selected dropdown item
           var selected_val = $dropdown.find('li').eq($dropdown.data('selected_index')).data('id');
           $input.val(selected_val);
           // Hide dropdown
@@ -164,6 +178,8 @@
     return $input;
   };
 
+  // -------------------- Functions --------------------
+
   /*
    * Filter the array according to the match string
    */
@@ -173,10 +189,19 @@
     });
   }
 
-  /**
-   * Populates customer id dropdown
+  /*
+   * Cache the results
    */
-  function populate_customer_dropdown(entries) {
+  function cacheResults(input, suggestions) {
+    _cachedQueryResult = suggestions;
+    _cachedResults[input] = suggestions;
+    _cachedResultsKeys.push(input);
+  }
+
+  /**
+   * Populates dropdown with the filtered array
+   */
+  function populate_dropdown(entries) {
     entries = entries.slice(0, _settings.limit);
 
     var list = $('<ul></ul>').addClass('list-group');
@@ -225,41 +250,3 @@
   }
 
 } (jQuery));
-
-
-
-
-
-
-// -------------------------- Test init --------------------------
-
-// /**
-//  * Retrieves customers matching the input string, and displays the results
-//  */
-// function get_matching_customers(match_string, limit) {
-//   return $.ajax({
-//     type: 'POST',
-//     url: 'http://localhost:8888/ajax_test.php',
-//     dataType: 'json',
-//     data: {
-//       // campaign_id: CAMPAIGN_ID,
-//       match_string: match_string,
-//       limit: limit,
-//       // query_type: queryType
-//     }
-//   });
-// }
-
-$(function() {
-  $('#customer_id_input').dropdown_suggest('http://localhost:8888/ajax_test.php',
-    {
-      limit: 10,
-      frontend_filter: true,
-      select_callback: function(entry) {
-        alert(entry + ' selected!');
-      }
-    });
-});
-
-
-
