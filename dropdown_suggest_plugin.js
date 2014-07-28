@@ -20,6 +20,7 @@
     _url = url;
 
     _settings = $.extend({
+      requestType: 'POST',
       dataType: 'json',
       limit: 10,
       fade_time: 100,
@@ -239,7 +240,7 @@
    */
   function ajax_call(match_string) {
     return $.ajax({
-      type: _settings.type,
+      type: _settings.requestType,
       url: _url,
       dataType: _settings.dataType,
       data: {
