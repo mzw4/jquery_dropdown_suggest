@@ -21,10 +21,12 @@ $('your_element').dropdown_suggest('ajax_url');
 
 The ajax request will receive two parameters:
 
+```javascript
 {
   match_string: string  // query input to filter against
   limit: int            // number of suggestions to display
 }
+```
 
 By default, your ajax request should return a json encoded array. You can change the datatype in the options if desired.
 
